@@ -53,6 +53,7 @@ typedef enum OPTION_choice {
     OPT_CLRREJECT, OPT_ALIAS, OPT_CACREATESERIAL, OPT_CLREXT, OPT_OCSPID,
     OPT_SUBJECT_HASH_OLD, OPT_ISSUER_HASH_OLD, OPT_COPY_EXTENSIONS,
     OPT_BADSIG, OPT_MD, OPT_ENGINE, OPT_NOCERT, OPT_PRESERVE_DATES,
+    OPT_NOTBEFORE, OPT_NOTAFTER,
     OPT_R_ENUM, OPT_PROV_ENUM, OPT_EXT
 } OPTION_CHOICE;
 
@@ -134,6 +135,9 @@ const OPTIONS x509_options[] = {
      "Serial number to use, overrides -CAserial"},
     {"next_serial", OPT_NEXT_SERIAL, '-',
      "Increment current certificate serial number"},
+    {"notbefore", OPT_NOTBEFORE, 's', "Cert notBefore, YYMMDDHHMMSSZ"},
+    {"notafter", OPT_NOTAFTER, 's',
+     "YYMMDDHHMMSSZ cert notAfter (overrides -days)"},
     {"days", OPT_DAYS, 'n',
      "Number of days until newly generated certificate expires - default 30"},
     {"preserve_dates", OPT_PRESERVE_DATES, '-',
@@ -276,7 +280,7 @@ int x509_main(int argc, char **argv)
     char *ext_names = NULL;
     char *extsect = NULL, *extfile = NULL, *passin = NULL, *passinarg = NULL;
     char *infile = NULL, *outfile = NULL, *privkeyfile = NULL, *CAfile = NULL;
-    char *prog;
+    char *prog, *notbefore = NULL, *notafter = NULL;
     int days = UNSET_DAYS; /* not explicitly set */
     int x509toreq = 0, modulus = 0, print_pubkey = 0, pprint = 0;
     int CAformat = FORMAT_UNDEF, CAkeyformat = FORMAT_UNDEF;
@@ -372,6 +376,12 @@ int x509_main(int argc, char **argv)
                 vfyopts = sk_OPENSSL_STRING_new_null();
             if (!vfyopts || !sk_OPENSSL_STRING_push(vfyopts, opt_arg()))
                 goto opthelp;
+            break;
+        case OPT_NOTBEFORE:
+            notbefore = opt_arg();
+            break;
+        case OPT_NOTAFTER:
+            notafter = opt_arg();
             break;
         case OPT_DAYS:
             days = atoi(opt_arg());
@@ -604,8 +614,32 @@ int x509_main(int argc, char **argv)
     if (!opt_check_md(digest))
         goto opthelp;
 
+    if (preserve_dates && notbefore != NULL) {
+        BIO_printf(bio_err, "Cannot use -preserve_dates with -notbefore option\n");
+        goto err;
+    }
+    if (notbefore != NULL && !ASN1_TIME_set_string_X509(NULL, notbefore)) {
+        BIO_printf(bio_err,
+                   "start date is invalid, it should be YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ\n");
+        goto err;
+    }
+
+    if (preserve_dates && notafter != NULL) {
+        BIO_printf(bio_err, "Cannot use -preserve_dates with -notafter option\n");
+        goto err;
+    }
+    if (notafter != NULL && !ASN1_TIME_set_string_X509(NULL, notafter)) {
+        BIO_printf(bio_err,
+                   "end date is invalid, it should be YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ\n");
+        goto err;
+    }
+
     if (preserve_dates && days != UNSET_DAYS) {
         BIO_printf(bio_err, "Cannot use -preserve_dates with -days option\n");
+        goto err;
+    }
+    if (notafter != NULL && days != UNSET_DAYS) {
+        BIO_printf(bio_err, "Cannot use -notafter with -days option\n");
         goto err;
     }
     if (days == UNSET_DAYS)
@@ -828,7 +862,7 @@ int x509_main(int argc, char **argv)
         goto end;
 
     if (reqfile || newcert || privkey != NULL || CAfile != NULL) {
-        if (!preserve_dates && !set_cert_times(x, NULL, NULL, days))
+        if (!preserve_dates && !set_cert_times(x, notbefore, notafter, days))
             goto end;
         if (!X509_set_issuer_name(x, X509_get_subject_name(issuer_cert)))
             goto end;
