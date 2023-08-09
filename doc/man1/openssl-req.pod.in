@@ -36,6 +36,8 @@ B<openssl> B<req>
 [B<-x509v1>]
 [B<-CA> I<filename>|I<uri>]
 [B<-CAkey> I<filename>|I<uri>]
+[B<-startdate> I<date>]
+[B<-enddate> I<date>]
 [B<-days> I<n>]
 [B<-set_serial> I<n>]
 [B<-newhdr>]
@@ -324,11 +326,27 @@ Sets the "CA" private key to sign a certificate with.
 The private key must match the public key of the certificate given with B<-CA>.
 If this option is not provided then the key must be present in the B<-CA> input.
 
+=item B<-startdate> I<date>
+
+This allows the start date to be explicitly set. The format of the
+date is YYMMDDHHMMSSZ (the same as an ASN1 UTCTime structure), or
+YYYYMMDDHHMMSSZ (the same as an ASN1 GeneralizedTime structure). In
+both formats, seconds SS and timezone Z must be present.
+
+=item B<-enddate> I<date>
+
+This allows the expiry date to be explicitly set. The format of the
+date is YYMMDDHHMMSSZ (the same as an ASN1 UTCTime structure), or
+YYYYMMDDHHMMSSZ (the same as an ASN1 GeneralizedTime structure). In
+both formats, seconds SS and timezone Z must be present.
+Cannot be used together with the B<-days> option.
+
 =item B<-days> I<n>
 
 When B<-x509> is in use this specifies the number of
 days to certify the certificate for, otherwise it is ignored. I<n> should
 be a positive integer. The default is 30 days.
+Cannot be used together with the options B<-startdate> and B<-enddate>.
 
 =item B<-set_serial> I<n>
 
@@ -538,6 +556,15 @@ by OpenSSL's request signing utilities but some CAs might want them.
 This specifies the section containing the distinguished name fields to
 prompt for when generating a certificate or certificate request. The format
 is described in the next section.
+
+=item B<default_startdate>
+
+The same as the B<-startdate> option. The start date to certify
+a certificate for. If not set the current time is used.
+
+=item B<default_enddate>
+
+The same as the B<-enddate> option.
 
 =back
 

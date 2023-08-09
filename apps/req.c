@@ -87,7 +87,7 @@ typedef enum OPTION_choice {
     OPT_VERIFY, OPT_NOENC, OPT_NODES, OPT_NOOUT, OPT_VERBOSE, OPT_UTF8,
     OPT_NAMEOPT, OPT_REQOPT, OPT_SUBJ, OPT_SUBJECT, OPT_TEXT,
     OPT_X509, OPT_X509V1, OPT_CA, OPT_CAKEY,
-    OPT_MULTIVALUE_RDN, OPT_DAYS, OPT_SET_SERIAL,
+    OPT_MULTIVALUE_RDN, OPT_STARTDATE, OPT_ENDDATE, OPT_DAYS, OPT_SET_SERIAL,
     OPT_COPY_EXTENSIONS, OPT_EXTENSIONS, OPT_REQEXTS, OPT_ADDEXT,
     OPT_PRECERT, OPT_MD,
     OPT_SECTION,
@@ -127,6 +127,9 @@ const OPTIONS req_options[] = {
      "Print the subject of the output request or cert"},
     {"multivalue-rdn", OPT_MULTIVALUE_RDN, '-',
      "Deprecated; multi-valued RDNs support is always on."},
+    {"startdate", OPT_STARTDATE, 's', "Cert notBefore, YYMMDDHHMMSSZ"},
+    {"enddate", OPT_ENDDATE, 's',
+     "YYMMDDHHMMSSZ cert notAfter (overrides -days)"},
     {"days", OPT_DAYS, 'p', "Number of days cert is valid for"},
     {"set_serial", OPT_SET_SERIAL, 's', "Serial number to use"},
     {"copy_extensions", OPT_COPY_EXTENSIONS, 's',
@@ -258,6 +261,7 @@ int req_main(int argc, char **argv)
     char *template = default_config_file, *keyout = NULL;
     const char *keyalg = NULL;
     OPTION_CHOICE o;
+    char *startdate = NULL, *enddate = NULL;
     int days = UNSET_DAYS;
     int ret = 1, gen_x509 = 0, i = 0, newreq = 0, verbose = 0;
     int informat = FORMAT_UNDEF, outformat = FORMAT_PEM, keyform = FORMAT_UNDEF;
@@ -416,6 +420,12 @@ int req_main(int argc, char **argv)
             break;
         case OPT_CAKEY:
             CAkeyfile = opt_arg();
+            break;
+        case OPT_STARTDATE:
+            startdate = opt_arg();
+            break;
+        case OPT_ENDDATE:
+            enddate = opt_arg();
             break;
         case OPT_DAYS:
             days = atoi(opt_arg());
@@ -793,10 +803,32 @@ int req_main(int argc, char **argv)
 
             if (!X509_set_issuer_name(new_x509, issuer))
                 goto end;
+
+            if (startdate == NULL)
+                startdate =
+                    app_conf_try_string(req_conf, section, "default_startdate");
+            if (startdate != NULL && !ASN1_TIME_set_string_X509(NULL, startdate)) {
+                BIO_printf(bio_err,
+                           "start date is invalid, it should be YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ\n");
+                goto end;
+            }
+
+            if (enddate != NULL && days != UNSET_DAYS) {
+                BIO_printf(bio_err, "Cannot use -enddate with -days option\n");
+                goto end;
+            }
+            if (enddate == NULL && days == UNSET_DAYS)
+                enddate = app_conf_try_string(req_conf, section, "default_enddate");
+            if (enddate != NULL && !ASN1_TIME_set_string_X509(NULL, enddate)) {
+                BIO_printf(bio_err,
+                           "end date is invalid, it should be YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ\n");
+                goto end;
+            }
+
             if (days == UNSET_DAYS) {
                 days = DEFAULT_DAYS;
             }
-            if (!set_cert_times(new_x509, NULL, NULL, days))
+            if (!set_cert_times(new_x509, startdate, enddate, days))
                 goto end;
             if (!X509_set_subject_name(new_x509, n_subj))
                 goto end;
