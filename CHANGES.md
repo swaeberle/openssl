@@ -25,6 +25,11 @@ OpenSSL 3.2
 
 ### Changes between 3.1 and 3.2 [xx XXX xxxx]
 
+ * Added options for explicit setting start and end dates of certificates
+   created with the `req` and `x509` apps.
+
+   *Stephan Wurm*
+
  * Added client side support for QUIC
 
    *Hugo Landau*
